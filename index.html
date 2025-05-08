@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Ball Attack Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: transparent;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <!-- Game content will go here -->
+    </div>
+
+    <!-- Add shader scripts -->
+    <script id="vertexShader" type="x-shader/x-vertex">
+        attribute vec2 position;
+        attribute vec3 color;
+        attribute float size;
+        attribute float rotation;
+        
+        uniform mat4 projection;
+        uniform float time;
+        
+        varying vec3 vColor;
+        
+        void main() {
+            vColor = color;
+            float angle = rotation + time * 2.0;
+            mat2 rot = mat2(
+                cos(angle), -sin(angle),
+                sin(angle), cos(angle)
+            );
+            vec2 rotatedPos = rot * position;
+            gl_Position = projection * vec4(rotatedPos, 0.0, 1.0);
+            gl_PointSize = size;
+        }
+    </script>
+    
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        precision mediump float;
+        varying vec3 vColor;
+        
+        void main() {
+            vec2 coord = gl_PointCoord - vec2(0.5);
+            if (length(coord) > 0.5) discard;
+            gl_FragColor = vec4(vColor, 1.0);
+        }
+    </script>
+
+    <script src="game.js"></script>
+</body>
+</html> 
