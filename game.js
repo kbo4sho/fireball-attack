@@ -8,7 +8,10 @@ let isGameInitialized = false;
 // Game objects
 const game = {
     isOver: false,
-    score: 0
+    score: 0,
+    streak: 0,  // Add streak counter
+    bestStreak: 0,  // Track best streak
+    isMobile: false  // Add mobile detection
 };
 
 const car = {
@@ -16,7 +19,9 @@ const car = {
     y: window.innerHeight - 150,
     width: 100,  // Increased width for better detail
     height: 40,  // Increased height for better proportion
-    speed: 8     // Slightly increased speed
+    speed: 8,    // Slightly increased speed
+    rockets: [], // Array to store rocket particles
+    isFlying: false // Track if car is off the road
 };
 
 const mountains = {
@@ -101,14 +106,17 @@ const mathProblem = {
     userAnswer: '',
     isActive: false,
     generate() {
-        this.num1 = Math.floor(Math.random() * 10);
-        this.num2 = Math.floor(Math.random() * 10);
+        // Generate numbers that will result in a sum between 10 and 20
         this.operation = Math.random() < 0.5 ? '+' : '-';
         
-        if (this.operation === '-') {
-            if (this.num1 < this.num2) {
-                [this.num1, this.num2] = [this.num2, this.num1];
-            }
+        if (this.operation === '+') {
+            // For addition, ensure sum is between 10 and 20
+            this.num1 = Math.floor(Math.random() * 9) + 5; // First number between 5 and 13
+            this.num2 = Math.floor(Math.random() * (20 - this.num1 - 5)) + 5; // Second number to make sum between 10 and 20
+        } else {
+            // For subtraction, ensure result is between 10 and 20
+            this.num2 = Math.floor(Math.random() * 9) + 1; // Second number between 1 and 9
+            this.num1 = Math.floor(Math.random() * 9) + 10 + this.num2; // First number to make result between 10 and 20
         }
         
         this.answer = this.operation === '+' ? 
@@ -439,11 +447,178 @@ const confetti = {
     }
 };
 
-// Update resizeCanvas function to handle resizing elements
+// Add rocket particle system
+const rocketParticles = {
+    particles: [],
+    maxParticles: 50,
+    
+    addParticle(x, y) {
+        if (this.particles.length >= this.maxParticles) return;
+        
+        this.particles.push({
+            x: x,
+            y: y,
+            size: Math.random() * 8 + 4,
+            speed: Math.random() * 2 + 1,
+            life: 1,
+            color: Math.random() < 0.5 ? '#FF4500' : '#FFA500'
+        });
+    },
+    
+    update() {
+        this.particles = this.particles.filter(p => p.life > 0);
+        this.particles.forEach(p => {
+            p.y += p.speed;
+            p.life -= 0.02;
+            p.size *= 0.98;
+        });
+    },
+    
+    draw() {
+        this.particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add glow effect
+            const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 2);
+            gradient.addColorStop(0, p.color);
+            gradient.addColorStop(1, 'rgba(255, 69, 0, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+    }
+};
+
+// Add touch controls
+const touchControls = {
+    buttons: {
+        left: { x: 0, y: 0, width: 80, height: 80, active: false },
+        right: { x: 0, y: 0, width: 80, height: 80, active: false },
+        up: { x: 0, y: 0, width: 80, height: 80, active: false },
+        down: { x: 0, y: 0, width: 80, height: 80, active: false }
+    },
+    
+    init() {
+        // Position buttons for mobile
+        const buttonSpacing = 20;
+        const bottomMargin = 40;
+        const sideMargin = 40;
+        
+        // Left/Right buttons
+        this.buttons.left.x = sideMargin;
+        this.buttons.left.y = canvas.height - this.buttons.left.height - bottomMargin;
+        this.buttons.right.x = sideMargin + this.buttons.left.width + buttonSpacing;
+        this.buttons.right.y = this.buttons.left.y;
+        
+        // Up/Down buttons
+        this.buttons.up.x = canvas.width - sideMargin - this.buttons.up.width * 2 - buttonSpacing;
+        this.buttons.up.y = canvas.height - this.buttons.up.height - bottomMargin;
+        this.buttons.down.x = canvas.width - sideMargin - this.buttons.down.width;
+        this.buttons.down.y = this.buttons.up.y;
+    },
+    
+    draw() {
+        if (!game.isMobile) return;
+        
+        // Draw control buttons
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        
+        // Draw button backgrounds
+        for (let key in this.buttons) {
+            const btn = this.buttons[key];
+            ctx.fillStyle = btn.active ? '#FFD700' : '#555555';
+            ctx.beginPath();
+            ctx.arc(
+                btn.x + btn.width/2,
+                btn.y + btn.height/2,
+                btn.width/2,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Draw arrow indicators
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            switch(key) {
+                case 'left':
+                    ctx.moveTo(btn.x + btn.width * 0.7, btn.y + btn.height * 0.5);
+                    ctx.lineTo(btn.x + btn.width * 0.3, btn.y + btn.height * 0.3);
+                    ctx.lineTo(btn.x + btn.width * 0.3, btn.y + btn.height * 0.7);
+                    break;
+                case 'right':
+                    ctx.moveTo(btn.x + btn.width * 0.3, btn.y + btn.height * 0.5);
+                    ctx.lineTo(btn.x + btn.width * 0.7, btn.y + btn.height * 0.3);
+                    ctx.lineTo(btn.x + btn.width * 0.7, btn.y + btn.height * 0.7);
+                    break;
+                case 'up':
+                    ctx.moveTo(btn.x + btn.width * 0.5, btn.y + btn.height * 0.3);
+                    ctx.lineTo(btn.x + btn.width * 0.3, btn.y + btn.height * 0.7);
+                    ctx.lineTo(btn.x + btn.width * 0.7, btn.y + btn.height * 0.7);
+                    break;
+                case 'down':
+                    ctx.moveTo(btn.x + btn.width * 0.5, btn.y + btn.height * 0.7);
+                    ctx.lineTo(btn.x + btn.width * 0.3, btn.y + btn.height * 0.3);
+                    ctx.lineTo(btn.x + btn.width * 0.7, btn.y + btn.height * 0.3);
+                    break;
+            }
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    },
+    
+    handleTouchStart(e) {
+        if (!game.isMobile) return;
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        
+        for (let key in this.buttons) {
+            const btn = this.buttons[key];
+            if (this.isPointInButton(x, y, btn)) {
+                btn.active = true;
+                keys[`Arrow${key.charAt(0).toUpperCase() + key.slice(1)}`] = true;
+            }
+        }
+    },
+    
+    handleTouchEnd(e) {
+        if (!game.isMobile) return;
+        for (let key in this.buttons) {
+            this.buttons[key].active = false;
+            keys[`Arrow${key.charAt(0).toUpperCase() + key.slice(1)}`] = false;
+        }
+    },
+    
+    isPointInButton(x, y, btn) {
+        const dx = x - (btn.x + btn.width/2);
+        const dy = y - (btn.y + btn.height/2);
+        return Math.sqrt(dx * dx + dy * dy) <= btn.width/2;
+    }
+};
+
+// Update resizeCanvas function
 function resizeCanvas() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     car.y = canvas.height - 150;
+    
+    // Check if we're on mobile
+    game.isMobile = window.innerWidth <= 768;
+    
+    // Update touch controls if on mobile
+    if (game.isMobile) {
+        touchControls.init();
+    }
     
     // Update road position
     drawRoad();
@@ -467,6 +642,33 @@ function drawCar() {
     ctx.beginPath();
     ctx.ellipse(x + 50, y + 38, 45, 8, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // Draw rocket effects if car is flying
+    if (car.isFlying) {
+        // Add new rocket particles
+        rocketParticles.addParticle(x + 25, y + 25);
+        rocketParticles.addParticle(x + 75, y + 25);
+        
+        // Draw rocket flames
+        const flameGradient = ctx.createLinearGradient(x, y + 25, x, y + 45);
+        flameGradient.addColorStop(0, '#FF4500');
+        flameGradient.addColorStop(1, 'rgba(255, 69, 0, 0)');
+        
+        ctx.fillStyle = flameGradient;
+        ctx.beginPath();
+        ctx.moveTo(x + 20, y + 25);
+        ctx.lineTo(x + 30, y + 45);
+        ctx.lineTo(x + 20, y + 45);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.moveTo(x + 70, y + 25);
+        ctx.lineTo(x + 80, y + 45);
+        ctx.lineTo(x + 70, y + 45);
+        ctx.closePath();
+        ctx.fill();
+    }
 
     // Main body
     ctx.fillStyle = '#FF0000'; // Ferrari Red
@@ -790,21 +992,35 @@ const scoreDisplay = {
         ctx.shadowColor = sun.isDay ? '#FFD700' : '#87CEEB';
         ctx.shadowBlur = 15;
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 48px Arial'; // Increased from 32px
+        ctx.font = 'bold 48px Arial';
         ctx.textAlign = 'left';
         ctx.fillText(`Score: ${Math.floor(this.value)}`, 30, 60);
+        
+        // Draw streak counter
+        if (game.streak > 0) {
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '36px Arial';
+            ctx.fillText(`Streak: ${game.streak}`, 30, 110);
+            
+            // Draw best streak
+            if (game.bestStreak > 0) {
+                ctx.fillStyle = '#FF4500';
+                ctx.font = '28px Arial';
+                ctx.fillText(`Best: ${game.bestStreak}`, 30, 150);
+            }
+        }
         
         // Draw multiplier if active
         if (this.multiplier > 1) {
             ctx.fillStyle = '#FFD700';
-            ctx.font = '36px Arial'; // Increased from 24px
+            ctx.font = '36px Arial';
             ctx.fillText(`x${this.multiplier}`, 250, 60);
         }
         
         // Draw combo counter if active
         if (this.combo > 0) {
             ctx.fillStyle = '#FF4500';
-            ctx.font = '28px Arial'; // Increased from 20px
+            ctx.font = '28px Arial';
             ctx.fillText(`Combo: ${this.combo}`, 30, 100);
         }
         
@@ -813,7 +1029,7 @@ const scoreDisplay = {
             ctx.save();
             ctx.translate(p.x, p.y);
             ctx.rotate(p.rotation);
-            ctx.font = '24px Arial'; // Increased particle text size
+            ctx.font = '24px Arial';
             ctx.fillStyle = `rgba(255, 215, 0, ${p.life})`;
             ctx.fillText(`+${p.value}`, 0, 0);
             ctx.restore();
@@ -847,6 +1063,7 @@ const scoreDisplay = {
         this.multiplier = 1;
         this.combo = 0;
         this.particles = [];
+        game.streak = 0;  // Reset streak when score is reset
     }
 };
 
@@ -924,6 +1141,22 @@ function updateGame() {
         speed = car.speed;
     }
     
+    // Add vertical movement
+    const roadY = canvas.height - 150;
+    if (keys['ArrowUp'] && car.y > roadY - 100) {
+        car.y -= car.speed;
+        isMoving = true;
+        speed = car.speed;
+    }
+    if (keys['ArrowDown'] && car.y < roadY) {
+        car.y += car.speed;
+        isMoving = true;
+        speed = car.speed;
+    }
+    
+    // Check if car is off the road
+    car.isFlying = car.y < roadY;
+    
     // Handle engine sound
     if (isMoving) {
         engineSound.start();
@@ -931,6 +1164,9 @@ function updateGame() {
     } else {
         engineSound.stop();
     }
+    
+    // Update rocket particles
+    rocketParticles.update();
     
     // Update mountain scroll
     mountains.offset -= mountains.speed;
@@ -949,7 +1185,7 @@ function updateGame() {
 // Update gameLoop function to use new score display
 function gameLoop(timestamp) {
     // Clear game canvas with sky color
-    sun.update(timestamp); // Add this line to update sun position
+    sun.update(timestamp);
     
     // Clear game canvas
     ctx.fillStyle = '#87CEEB';
@@ -963,6 +1199,14 @@ function gameLoop(timestamp) {
     drawMountains();
     drawRoad();
     drawCar();
+    
+    // Draw rocket particles
+    rocketParticles.draw();
+    
+    // Draw touch controls if on mobile
+    if (game.isMobile) {
+        touchControls.draw();
+    }
     
     // Draw rays
     ctx.fillStyle = 'rgba(255, 165, 0, 0.6)';
@@ -1019,6 +1263,22 @@ function initializeGame() {
         confetti.resize();
     });
     
+    // Add touch event listeners
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        touchControls.handleTouchStart(e);
+    }, { passive: false });
+    
+    canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        touchControls.handleTouchEnd(e);
+    }, { passive: false });
+    
+    canvas.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        touchControls.handleTouchEnd(e);
+    }, { passive: false });
+    
     // Single keyboard event listeners
     document.addEventListener('keydown', (e) => {
         if (!keys[e.key]) {  // Only handle key if it's not already pressed
@@ -1037,11 +1297,18 @@ function initializeGame() {
                         sun.rays = [];
                         mathProblem.isActive = false;
                         confetti.celebrate();
+                        
+                        // Update streak
+                        game.streak++;
+                        if (game.streak > game.bestStreak) {
+                            game.bestStreak = game.streak;
+                        }
                     } else {
                         mathProblem.userAnswer = '';
+                        game.streak = 0;  // Reset streak on wrong answer
                     }
+                    e.preventDefault();
                 }
-                e.preventDefault();
             }
         }
     });
@@ -1063,4 +1330,7 @@ document.addEventListener('click', () => {
     if (audioContext.state === 'suspended') {
         audioContext.resume();
     }
-}, { once: true }); 
+}, { once: true });
+
+// Add viewport meta tag to HTML
+document.head.innerHTML += '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">'; 
